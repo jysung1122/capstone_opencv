@@ -4,14 +4,14 @@ from sklearn.linear_model import LinearRegression
 from clustering import *
 
 # 그레이스케일 이미지 불러오기
-original_image = cv2.imread('difficult.png', cv2.IMREAD_GRAYSCALE)
-#original_image = cv2.imread('difficult2.png', cv2.IMREAD_GRAYSCALE)
+#original_image = cv2.imread('difficult.png', cv2.IMREAD_GRAYSCALE)
+original_image = cv2.imread('difficult2.png', cv2.IMREAD_GRAYSCALE)
 #original_image = cv2.imread('simple.png', cv2.IMREAD_GRAYSCALE)
 #original_image = cv2.imread('simple2.png', cv2.IMREAD_GRAYSCALE)
 
 # 큰 ROI 설정
-x, y, w, h = 70, 30, 220, 350  # difficult1
-#x, y, w, h = 30, 30, 200, 370  # difficult2
+#x, y, w, h = 70, 30, 220, 350  # difficult1
+x, y, w, h = 30, 30, 200, 370  # difficult2
 #x, y, w, h = 30, 30, 220, 320  # simple.png
 #x, y, w, h = 80, 10, 200, 500  # simple2
 
@@ -84,29 +84,32 @@ second_median = (int(np.median(second_x)), int(np.median(second_y)))
 cv2.circle(image_with_roi, first_median, 3, (0, 255, 255), -1)  # 첫 번째 중앙값 좌표에 노란 점
 cv2.circle(image_with_roi, second_median, 3, (0, 255, 255), -1)  # 두 번째 중앙값 좌표에 노란 점
 
-# 왼쪽 위 작은 ROI 위치 및 크기 계산
-top_left_roi_x = second_median[0] - 85
-top_left_roi_y = y
-top_left_roi_w = 80
-top_left_roi_h = y + h - min(first_median[1], second_median[1]) - 120
+# 이미지 크기
+image_width, image_height = original_image.shape[1], original_image.shape[0]
 
-# 오른쪽 위 작은 ROI 위치 및 크기 계산
-top_right_roi_x = second_median[0] + 5
-top_right_roi_y = y
-top_right_roi_w = first_median[0] - top_right_roi_x - 5
-top_right_roi_h = y + h - min(first_median[1], second_median[1]) - 120
+# 왼쪽 위 작은 ROI
+top_left_roi_x = max(0, second_median[0] - 85)
+top_left_roi_y = max(0, y)
+top_left_roi_w = min(80, image_width - top_left_roi_x)
+top_left_roi_h = max(0, y + h - min(first_median[1], second_median[1]) - 120)
 
-# 왼쪽 아래 작은 ROI 위치 및 크기 계산
-btm_left_roi_x = second_median[0] - 85
-btm_left_roi_y = int(max(first_median[1], second_median[1]) + 120)
-btm_left_roi_w = 80
-btm_left_roi_h = y + h - max(first_median[1], second_median[1]) - 120
+# 오른쪽 위 작은 ROI
+top_right_roi_x = max(0, second_median[0] + 5)
+top_right_roi_y = max(0, y)
+top_right_roi_w = max(0, first_median[0] - top_right_roi_x - 5)
+top_right_roi_h = max(0, y + h - min(first_median[1], second_median[1]) - 120)
 
-# 오른쪽 아래 작은 ROI 위치 및 크기 계산
-btm_right_roi_x = second_median[0] + 5
-btm_right_roi_y = int(max(first_median[1], second_median[1]) + 120)
-btm_right_roi_w = first_median[0] - btm_right_roi_x - 5
-btm_right_roi_h = y + h - max(first_median[1], second_median[1]) - 120
+# 왼쪽 아래 작은 ROI
+btm_left_roi_x = max(0, second_median[0] - 85)
+btm_left_roi_y = max(0, int(max(first_median[1], second_median[1]) + 120))
+btm_left_roi_w = min(80, image_width - btm_left_roi_x)
+btm_left_roi_h = max(0, y + h - btm_left_roi_y)
+
+# 오른쪽 아래 작은 ROI
+btm_right_roi_x = max(0, second_median[0] + 5)
+btm_right_roi_y = max(0, int(max(first_median[1], second_median[1]) + 120))
+btm_right_roi_w = max(0, first_median[0] - btm_right_roi_x - 5)
+btm_right_roi_h = max(0, y + h - btm_right_roi_y)
 
 # 왼쪽 위 작은 ROI 그리기
 cv2.rectangle(image_with_roi, (top_left_roi_x, top_left_roi_y),
@@ -162,8 +165,11 @@ for j in range(top_left_roi_x, top_left_roi_x + top_left_roi_w):  # 왼쪽에서
 
         previous_value = pixel_value  # 현재 밝기 값을 이전 값으로 업데이트
 
+# 직선 기반 점 필터링
+filtered_points = filter_points_by_lines(top_left_points, line_threshold=2)
+
 # DBSCAN 군집 중앙값 계산
-top_left_cluster_medians = cluster_and_get_medians(top_left_points)
+top_left_cluster_medians = cluster_and_get_medians(filtered_points)
 # 중앙값 좌표에 동그라미 그리기
 for (x, y) in top_left_cluster_medians:
     cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
@@ -197,9 +203,11 @@ for j in range(top_right_roi_x, top_right_roi_x + top_right_roi_w):  # 왼쪽에
 
         previous_value = pixel_value  # 현재 밝기 값을 이전 값으로 업데이트
 
+# 직선 기반 점 필터링
+filtered_points = filter_points_by_lines(top_right_points, line_threshold=2)
 
 # DBSCAN 군집 중앙값 계산
-top_right_cluster_medians = cluster_and_get_medians(top_right_points)
+top_right_cluster_medians = cluster_and_get_medians(filtered_points)
 # 중앙값 좌표에 동그라미 그리기
 for (x, y) in top_right_cluster_medians:
     cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
@@ -233,8 +241,12 @@ for j in range(btm_left_roi_x, btm_left_roi_x + btm_left_roi_w):  # 왼쪽에서
 
         previous_value = pixel_value  # 현재 밝기 값을 이전 값으로 업데이트
 
+
+# 직선 기반 점 필터링
+filtered_points = filter_points_by_lines(btm_left_points, line_threshold=2)
+
 # DBSCAN 군집 중앙값 계산
-btm_left_cluster_medians = cluster_and_get_medians(btm_left_points)
+btm_left_cluster_medians = cluster_and_get_medians(filtered_points)
 # 중앙값 좌표에 동그라미 그리기
 for (x, y) in btm_left_cluster_medians:
     cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
@@ -269,8 +281,11 @@ for j in range(btm_right_roi_x, btm_right_roi_x + btm_right_roi_w):  # 왼쪽에
         previous_value = pixel_value  # 현재 밝기 값을 이전 값으로 업데이트
 
 
+# 직선 기반 점 필터링
+filtered_points = filter_points_by_lines(btm_right_points, line_threshold=2)
+
 # DBSCAN 군집 중앙값 계산
-btm_right_cluster_medians = cluster_and_get_medians(btm_right_points)
+btm_right_cluster_medians = cluster_and_get_medians(filtered_points)
 # 중앙값 좌표에 동그라미 그리기
 for (x, y) in btm_right_cluster_medians:
     cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
