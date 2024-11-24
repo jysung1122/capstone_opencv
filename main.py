@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from clustering import *
+from point_detection import *
 
 # 그레이스케일 이미지 불러오기
 #original_image = cv2.imread('difficult.png', cv2.IMREAD_GRAYSCALE)
@@ -25,44 +26,15 @@ cv2.rectangle(image_with_roi, (x, y), (x + w, y + h), (0, 255, 0), 2)
 threshold_value = 45
 _, thresholded_image = cv2.threshold(original_image, threshold_value, 255, cv2.THRESH_TOZERO)
 
-# 첫 번째와 두 번째로 찍힌 점들의 리스트 초기화
-first_points = []
-second_points = []
 
 # ROI 내부에서 밝기 변화 감지하여 점 찍기
-for i in range(y + 1, y + h - 1):  # ROI 내부의 y 좌표 (위에서 아래로)
-    points_marked = 0  # 매 행(row)마다 points_marked를 초기화
-    previous_value = None  # 각 행(row)마다 previous_value 초기화
-    last_marked_position = None
-
-    for j in range(w - 1, -1, -1):  # ROI 내부의 x 좌표 (오른쪽에서 왼쪽으로)
-        pixel_value = int(thresholded_image[i, x + j])  # 현재 (x + j, i) 위치의 픽셀 값
-
-        if previous_value is not None:
-            delta = abs(pixel_value - previous_value)  # 이전 픽셀과의 밝기 차이 계산
-            if delta >= 5:
-                if points_marked == 0 or (points_marked < 2 and abs(j - last_marked_position) > 5):
-                    # 변화 감지 지점에 빨간 점 표시
-                    #cv2.circle(image_with_roi, (x + j, i), 1, (0, 0, 255), -1)
-
-                    # 첫 번째와 두 번째 점에 따라 리스트에 추가
-                    if points_marked == 0:
-                        first_points.append((x + j, i))  # 첫 번째 점 리스트에 추가
-                    elif points_marked == 1:
-                        second_points.append((x + j, i))  # 두 번째 점 리스트에 추가
-
-                    points_marked += 1  # 변화 지점 카운트 증가
-                    last_marked_position = j
-
-                    # 두 개의 변화 지점을 찾았으면 더 이상 점 찍기 중지
-                    if points_marked == 2:
-                        break
-
-        previous_value = pixel_value  # 이전 픽셀 값 업데이트
+first_points, second_points = detect_edge_points_in_roi(
+    thresholded_image, x, y, w, h, delta_threshold=5, max_points=2
+)
 
 # 각 행마다 첫 번째 점들과 두 번째 점들의 리스트 출력
 # print("첫 번째 점들의 리스트:", first_points)
-# print("두 번째 점들의 리스트:", second_points)
+print("두 번째 점들의 리스트:", second_points)
 
 # 첫 번째 점들의 x, y 좌표 추출
 first_x = [point[0] for point in first_points]
@@ -137,71 +109,27 @@ nlm_denoised = cv2.fastNlMeansDenoising(
 )
 
 # 왼쪽 위 작은 ROI 밑에서부터 위로 스캔하기 (y축 기준으로 밝기 변화 탐지)
-top_left_points = []  # 변화 감지 좌표를 저장할 리스트 생성
-for j in range(top_left_roi_x, top_left_roi_x + top_left_roi_w):  # 왼쪽에서 오른쪽으로 x 좌표 스캔
-    points_marked = 0  # 각 x축에 대해 points_marked를 초기화
-    previous_value = None  # 이전 밝기 값 초기화
-    last_marked_position = None
-
-    for i in range(top_left_roi_y + top_left_roi_h - 1, top_left_roi_y, -1):  # 밑에서부터 위로 y 좌표 스캔
-        pixel_value = int(nlm_denoised[i, j])  # 현재 (j, i) 위치의 픽셀 값
-
-        if previous_value is not None:
-            delta = abs(pixel_value - previous_value)  # 이전 픽셀과의 밝기 차이 계산
-            if delta >= 2:  # 밝기 변화가 2 이상이면 변화 감지로 판단
-                if points_marked == 0 or (points_marked < 3 and abs(i - last_marked_position) > 5):
-                    # 변화 감지 지점에 빨간 점 표시
-                    cv2.circle(image_with_roi, (j, i), 1, (0, 0, 255), -1)
-
-                    # 변화 감지된 좌표를 리스트에 추가
-                    top_left_points.append((j, i))
-
-                    points_marked += 1  # 변화 지점 카운트 증가
-                    last_marked_position = i  # 현재 y 좌표를 마지막 마킹 위치로 저장
-
-                    # 세 개의 변화 지점을 찾았으면 더 이상 점 찍기 중지
-                    if points_marked == 3:
-                        break
-
-        previous_value = pixel_value  # 현재 밝기 값을 이전 값으로 업데이트
+top_left_points = detect_brightness_changes_in_roi(
+    nlm_denoised, top_left_roi_x, top_left_roi_y, top_left_roi_w, top_left_roi_h,
+    image_with_roi, delta_threshold=2, max_points=3, direction='up', point_color=(0, 0, 255)
+)
 
 # 직선 기반 점 필터링
 filtered_points = filter_points_by_lines(top_left_points, line_threshold=2)
 
 # DBSCAN 군집 중앙값 계산
 top_left_cluster_medians = cluster_and_get_medians(filtered_points)
+
 # 중앙값 좌표에 동그라미 그리기
-for (x, y) in top_left_cluster_medians:
-    cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
+# for (x, y) in top_left_cluster_medians:
+#     cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
 
 
-top_right_points = []  # 변화 감지 좌표를 저장할 리스트 생성
 # 오른쪽 위 작은 ROI 밑에서부터 위로 스캔하기 (y축 기준으로 밝기 변화 탐지)
-for j in range(top_right_roi_x, top_right_roi_x + top_right_roi_w):  # 왼쪽에서 오른쪽으로 x 좌표 스캔
-    points_marked = 0  # 각 x축에 대해 points_marked를 초기화
-    previous_value = None  # 이전 밝기 값 초기화
-    last_marked_position = None
-
-    for i in range(top_right_roi_y + top_right_roi_h - 1, top_right_roi_y, -1):  # 밑에서부터 위로 y 좌표 스캔
-        pixel_value = int(nlm_denoised[i, j])  # 현재 (j, i) 위치의 픽셀 값
-
-        if previous_value is not None:
-            delta = abs(pixel_value - previous_value)  # 이전 픽셀과의 밝기 차이 계산
-            if delta >= 2:  # 밝기 변화가 2 이상이면 변화 감지로 판단
-                if points_marked == 0 or (points_marked < 3 and abs(i - last_marked_position) > 5):
-                    # 변화 감지 지점에 빨간 점 표시
-                    cv2.circle(image_with_roi, (j, i), 1, (0, 0, 255), -1)
-
-                    top_right_points.append((j, i))
-
-                    points_marked += 1  # 변화 지점 카운트 증가
-                    last_marked_position = i  # 현재 y 좌표를 마지막 마킹 위치로 저장
-
-                    # 두 개의 변화 지점을 찾았으면 더 이상 점 찍기 중지
-                    if points_marked == 3:
-                        break
-
-        previous_value = pixel_value  # 현재 밝기 값을 이전 값으로 업데이트
+top_right_points = detect_brightness_changes_in_roi(
+    nlm_denoised, top_right_roi_x, top_right_roi_y, top_right_roi_w, top_right_roi_h,
+    image_with_roi, delta_threshold=2, max_points=3, direction='up', point_color=(0, 0, 255)
+)
 
 # 직선 기반 점 필터링
 filtered_points = filter_points_by_lines(top_right_points, line_threshold=2)
@@ -209,38 +137,14 @@ filtered_points = filter_points_by_lines(top_right_points, line_threshold=2)
 # DBSCAN 군집 중앙값 계산
 top_right_cluster_medians = cluster_and_get_medians(filtered_points)
 # 중앙값 좌표에 동그라미 그리기
-for (x, y) in top_right_cluster_medians:
-    cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
+# for (x, y) in top_right_cluster_medians:
+#     cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
 
-
-btm_left_points = []  # 변화 감지 좌표를 저장할 리스트 생성
 # 왼쪽 아래 작은 ROI 위에서부터 밑으로 스캔하기 (y축 기준으로 밝기 변화 탐지)
-for j in range(btm_left_roi_x, btm_left_roi_x + btm_left_roi_w):  # 왼쪽에서 오른쪽으로 x 좌표 스캔
-    points_marked = 0  # 각 x축에 대해 points_marked를 초기화
-    previous_value = None  # 이전 밝기 값 초기화
-    last_marked_position = None
-
-    for i in range(btm_left_roi_y, btm_left_roi_y + btm_left_roi_h):  # 위에서부터 아래로 y 좌표 스캔
-        pixel_value = int(nlm_denoised[i, j])  # 현재 (j, i) 위치의 픽셀 값
-
-        if previous_value is not None:
-            delta = abs(pixel_value - previous_value)  # 이전 픽셀과의 밝기 차이 계산
-            if delta >= 2:  # 밝기 변화가 2 이상이면 변화 감지로 판단
-                if points_marked == 0 or (points_marked < 3 and abs(i - last_marked_position) > 5):
-                    # 변화 감지 지점에 빨간 점 표시
-                    cv2.circle(image_with_roi, (j, i), 1, (0, 0, 255), -1)
-
-                    btm_left_points.append((j, i))
-
-                    points_marked += 1  # 변화 지점 카운트 증가
-                    last_marked_position = i  # 현재 y 좌표를 마지막 마킹 위치로 저장
-
-                    # 세 개의 변화 지점을 찾았으면 더 이상 점 찍기 중지
-                    if points_marked == 3:
-                        break
-
-        previous_value = pixel_value  # 현재 밝기 값을 이전 값으로 업데이트
-
+btm_left_points = detect_brightness_changes_in_roi(
+    nlm_denoised, btm_left_roi_x, btm_left_roi_y, btm_left_roi_w, btm_left_roi_h,
+    image_with_roi, delta_threshold=2, max_points=3, direction='down', point_color=(0, 0, 255)
+)
 
 # 직선 기반 점 필터링
 filtered_points = filter_points_by_lines(btm_left_points, line_threshold=2)
@@ -248,38 +152,15 @@ filtered_points = filter_points_by_lines(btm_left_points, line_threshold=2)
 # DBSCAN 군집 중앙값 계산
 btm_left_cluster_medians = cluster_and_get_medians(filtered_points)
 # 중앙값 좌표에 동그라미 그리기
-for (x, y) in btm_left_cluster_medians:
-    cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
+# for (x, y) in btm_left_cluster_medians:
+#     cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
 
 
-btm_right_points = []
 # 오른쪽 아래 작은 ROI 위에서부터 밑으로 스캔하기 (y축 기준으로 밝기 변화 탐지)
-for j in range(btm_right_roi_x, btm_right_roi_x + btm_right_roi_w):  # 왼쪽에서 오른쪽으로 x 좌표 스캔
-    points_marked = 0  # 각 x축에 대해 points_marked를 초기화
-    previous_value = None  # 이전 밝기 값 초기화
-    last_marked_position = None
-
-    for i in range(btm_right_roi_y, btm_right_roi_y + btm_right_roi_h):  # 위에서부터 아래로 y 좌표 스캔
-        pixel_value = int(nlm_denoised[i, j])  # 현재 (j, i) 위치의 픽셀 값
-
-        if previous_value is not None:
-            delta = abs(pixel_value - previous_value)  # 이전 픽셀과의 밝기 차이 계산
-            if delta >= 2:  # 밝기 변화가 2 이상이면 변화 감지로 판단
-                if points_marked == 0 or (points_marked < 3 and abs(i - last_marked_position) > 5):
-                    # 변화 감지 지점에 빨간 점 표시
-                    cv2.circle(image_with_roi, (j, i), 1, (0, 0, 255), -1)
-
-                    btm_right_points.append((j, i))
-
-                    points_marked += 1  # 변화 지점 카운트 증가
-                    last_marked_position = i  # 현재 y 좌표를 마지막 마킹 위치로 저장
-
-                    # 세 개의 변화 지점을 찾았으면 더 이상 점 찍기 중지
-                    if points_marked == 3:
-                        break
-
-        previous_value = pixel_value  # 현재 밝기 값을 이전 값으로 업데이트
-
+btm_right_points = detect_brightness_changes_in_roi(
+    nlm_denoised, btm_right_roi_x, btm_right_roi_y, btm_right_roi_w, btm_right_roi_h,
+    image_with_roi, delta_threshold=2, max_points=3, direction='down', point_color=(0, 0, 255)
+)
 
 # 직선 기반 점 필터링
 filtered_points = filter_points_by_lines(btm_right_points, line_threshold=2)
@@ -287,9 +168,76 @@ filtered_points = filter_points_by_lines(btm_right_points, line_threshold=2)
 # DBSCAN 군집 중앙값 계산
 btm_right_cluster_medians = cluster_and_get_medians(filtered_points)
 # 중앙값 좌표에 동그라미 그리기
-for (x, y) in btm_right_cluster_medians:
-    cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
+# for (x, y) in btm_right_cluster_medians:
+#     cv2.circle(image_with_roi, (x, y), 3, (255, 255, 0), -1)  # 초록색 동그라미
 
+
+# y좌표가 가장 큰 점 선택
+if top_left_cluster_medians:
+    top_left_point = max(top_left_cluster_medians, key=lambda p: p[1])
+    print("Top Left Point:", top_left_point)
+else:
+    top_left_point = None
+
+# y좌표가 가장 큰 점 선택
+if top_right_cluster_medians:
+    top_right_point = max(top_right_cluster_medians, key=lambda p: p[1])
+    print("Top Right Point:", top_right_point)
+else:
+    top_right_point = None
+
+# y좌표가 가장 작은 점 선택
+if btm_left_cluster_medians:
+    btm_left_point = min(btm_left_cluster_medians, key=lambda p: p[1])
+    print("Bottom Left Point:", btm_left_point)
+else:
+    btm_left_point = None
+
+# y좌표가 가장 작은 점 선택
+if btm_right_cluster_medians:
+    btm_right_point = min(btm_right_cluster_medians, key=lambda p: p[1])
+    print("Bottom Right Point:", btm_right_point)
+else:
+    btm_right_point = None
+
+if top_left_point is not None:
+    cv2.circle(image_with_roi, top_left_point, 3, (0, 255, 0), -1)  # 초록색 점
+
+if top_right_point is not None:
+    cv2.circle(image_with_roi, top_right_point, 3, (0, 255, 0), -1)
+
+if btm_left_point is not None:
+    cv2.circle(image_with_roi, btm_left_point, 3, (0, 255, 0), -1)
+
+if btm_right_point is not None:
+    cv2.circle(image_with_roi, btm_right_point, 3, (0, 255, 0), -1)
+
+overlap_top_peak = max(top_left_point[1], top_right_point[1])
+overlap_btm_peak = min(btm_left_point[1], btm_right_point[1])
+
+print("Top Peak:", overlap_top_peak)
+print("Bottom Peak:", overlap_btm_peak)
+
+# top_peak에 20을 더하고, btm_peak에서 20을 뺌
+overlap_top_peak += 20
+overlap_btm_peak -= 20
+
+welding_points = []
+# second_points에서 y좌표가 btm_peak와 top_peak 사이에 있는 점들에 대해 이미지에 표시
+for point in second_points:
+    x_coord, y_coord = point
+    if overlap_top_peak <= y_coord <= overlap_btm_peak:
+        welding_points.append(point)
+        #cv2.circle(image_with_roi, (x_coord, y_coord), 1, (255, 0, 255), -1)
+
+# welding_points를 y좌표 기준으로 정렬 (필요에 따라 x좌표로 정렬할 수 있습니다)
+welding_points_sorted = sorted(welding_points, key=lambda p: p[1])
+
+# 점들을 연결하는 선 그리기
+for i in range(len(welding_points_sorted) - 1):
+    pt1 = welding_points_sorted[i]
+    pt2 = welding_points_sorted[i + 1]
+    cv2.line(image_with_roi, pt1, pt2, (255, 0, 255), 2) 
 
 
 # 결과 시각화

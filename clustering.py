@@ -1,7 +1,6 @@
 import numpy as np
 from sklearn.cluster import DBSCAN
 import cv2
-import matplotlib.pyplot as plt
 
 def cluster_and_get_medians(points, eps=8, min_samples=5):
     """
@@ -44,7 +43,7 @@ def cluster_and_get_medians(points, eps=8, min_samples=5):
 
 def filter_points_by_lines(points, line_threshold=2):
     """
-    점들을 직선 기반으로 필터링하고, 결과를 시각화합니다.
+    점들을 직선 기반으로 필터링합니다.
 
     Args:
         points (list of tuple): 점 좌표 리스트 [(x1, y1), (x2, y2), ...].
@@ -79,30 +78,6 @@ def filter_points_by_lines(points, line_threshold=2):
             distance = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) / np.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
             if distance < line_threshold:
                 filtered_points.append((x, y))
-
-    # 시각화
-    plt.figure(figsize=(10, 6))
-    # 원본 점들
-    points_np = np.array(points)
-    plt.scatter(points_np[:, 0], points_np[:, 1], c="red", label="Original Points", alpha=0.6)
-
-    # 필터링된 점들
-    if filtered_points:
-        filtered_np = np.array(filtered_points)
-        plt.scatter(filtered_np[:, 0], filtered_np[:, 1], c="blue", label="Filtered Points", alpha=0.6)
-
-    # 직선 시각화
-    for line in lines:
-        x1, y1, x2, y2 = line[0]
-        plt.plot([x1, x2], [y1, y2], color="green", linewidth=2, label="Detected Line")
-
-    # 레이블 추가
-    plt.title("Filtered Points and Detected Lines")
-    plt.xlabel("X Coordinate")
-    plt.ylabel("Y Coordinate")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
 
     return filtered_points
 
