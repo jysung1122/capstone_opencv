@@ -6,15 +6,15 @@ from point_detection import *
 
 # 그레이스케일 이미지 불러오기
 #original_image = cv2.imread('difficult.png', cv2.IMREAD_GRAYSCALE)
-original_image = cv2.imread('difficult2.png', cv2.IMREAD_GRAYSCALE)
+#original_image = cv2.imread('difficult2.png', cv2.IMREAD_GRAYSCALE)
 #original_image = cv2.imread('simple.png', cv2.IMREAD_GRAYSCALE)
-#original_image = cv2.imread('simple2.png', cv2.IMREAD_GRAYSCALE)
+original_image = cv2.imread('simple2.png', cv2.IMREAD_GRAYSCALE)
 
 # 큰 ROI 설정
 #x, y, w, h = 70, 30, 220, 350  # difficult1
-x, y, w, h = 30, 30, 200, 370  # difficult2
+#x, y, w, h = 30, 30, 200, 370  # difficult2
 #x, y, w, h = 30, 30, 220, 320  # simple.png
-#x, y, w, h = 80, 10, 200, 500  # simple2
+x, y, w, h = 80, 10, 200, 500  # simple2
 
 # ROI 시각적 표시를 위한 컬러 변환
 image_with_roi = cv2.cvtColor(original_image, cv2.COLOR_GRAY2BGR)
@@ -32,9 +32,20 @@ first_points, second_points = detect_edge_points_in_roi(
     thresholded_image, x, y, w, h, delta_threshold=5, max_points=2
 )
 
+# # first_points 시각화
+# for point in first_points:
+#     x_coord, y_coord = point
+#     cv2.circle(image_with_roi, (x_coord, y_coord), 2, (0, 0, 255), -1)
+#
+# # second_points 시각화
+# for point in second_points:
+#     x_coord, y_coord = point
+#     cv2.circle(image_with_roi, (x_coord, y_coord), 2, (0, 0, 255), -1)
+
+
 # 각 행마다 첫 번째 점들과 두 번째 점들의 리스트 출력
 # print("첫 번째 점들의 리스트:", first_points)
-print("두 번째 점들의 리스트:", second_points)
+# print("두 번째 점들의 리스트:", second_points)
 
 # 첫 번째 점들의 x, y 좌표 추출
 first_x = [point[0] for point in first_points]
@@ -175,28 +186,28 @@ btm_right_cluster_medians = cluster_and_get_medians(filtered_points)
 # y좌표가 가장 큰 점 선택
 if top_left_cluster_medians:
     top_left_point = max(top_left_cluster_medians, key=lambda p: p[1])
-    print("Top Left Point:", top_left_point)
+    #print("Top Left Point:", top_left_point)
 else:
     top_left_point = None
 
 # y좌표가 가장 큰 점 선택
 if top_right_cluster_medians:
     top_right_point = max(top_right_cluster_medians, key=lambda p: p[1])
-    print("Top Right Point:", top_right_point)
+    #print("Top Right Point:", top_right_point)
 else:
     top_right_point = None
 
 # y좌표가 가장 작은 점 선택
 if btm_left_cluster_medians:
     btm_left_point = min(btm_left_cluster_medians, key=lambda p: p[1])
-    print("Bottom Left Point:", btm_left_point)
+    #print("Bottom Left Point:", btm_left_point)
 else:
     btm_left_point = None
 
 # y좌표가 가장 작은 점 선택
 if btm_right_cluster_medians:
     btm_right_point = min(btm_right_cluster_medians, key=lambda p: p[1])
-    print("Bottom Right Point:", btm_right_point)
+    #print("Bottom Right Point:", btm_right_point)
 else:
     btm_right_point = None
 
@@ -215,29 +226,34 @@ if btm_right_point is not None:
 overlap_top_peak = max(top_left_point[1], top_right_point[1])
 overlap_btm_peak = min(btm_left_point[1], btm_right_point[1])
 
-print("Top Peak:", overlap_top_peak)
-print("Bottom Peak:", overlap_btm_peak)
+#print("Top Peak:", overlap_top_peak)
+#print("Bottom Peak:", overlap_btm_peak)
 
 # top_peak에 20을 더하고, btm_peak에서 20을 뺌
 overlap_top_peak += 20
 overlap_btm_peak -= 20
 
+# welding_points 리스트에 점들을 추가
 welding_points = []
-# second_points에서 y좌표가 btm_peak와 top_peak 사이에 있는 점들에 대해 이미지에 표시
 for point in second_points:
     x_coord, y_coord = point
     if overlap_top_peak <= y_coord <= overlap_btm_peak:
         welding_points.append(point)
         #cv2.circle(image_with_roi, (x_coord, y_coord), 1, (255, 0, 255), -1)
 
-# welding_points를 y좌표 기준으로 정렬 (필요에 따라 x좌표로 정렬할 수 있습니다)
-welding_points_sorted = sorted(welding_points, key=lambda p: p[1])
+# x좌표 기준으로 필터링: x좌표가 second_median의 x좌표와 ±5 이상 차이나면 제거
+filtered_welding_points = [
+    point for point in welding_points if abs(point[0] - second_median[0]) <= 5
+]
+
+# welding_points를 y좌표 기준으로 정렬
+welding_points_sorted = sorted(filtered_welding_points, key=lambda p: p[1])
 
 # 점들을 연결하는 선 그리기
 for i in range(len(welding_points_sorted) - 1):
     pt1 = welding_points_sorted[i]
     pt2 = welding_points_sorted[i + 1]
-    cv2.line(image_with_roi, pt1, pt2, (255, 0, 255), 2) 
+    cv2.line(image_with_roi, pt1, pt2, (255, 0, 255), 2)  # 보라색 선으로 연결
 
 
 # 결과 시각화

@@ -82,7 +82,7 @@ def detect_brightness_changes_in_roi(nlm_denoised, roi_x, roi_y, roi_w, roi_h, i
                 if delta >= delta_threshold:
                     if points_marked == 0 or (points_marked < max_points and abs(i - last_marked_position) > 5):
                         # 변화 감지 지점에 점 표시 (시각화가 필요 없으면 이 부분을 주석 처리하세요)
-                        cv2.circle(image_with_roi, (j, i), 1, point_color, -1)
+                        #cv2.circle(image_with_roi, (j, i), 1, point_color, -1)
 
                         points.append((j, i))
 
