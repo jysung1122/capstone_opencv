@@ -239,12 +239,31 @@ for point in second_points:
     x_coord, y_coord = point
     if overlap_top_peak <= y_coord <= overlap_btm_peak:
         welding_points.append(point)
-        #cv2.circle(image_with_roi, (x_coord, y_coord), 1, (255, 0, 255), -1)
 
-# x좌표 기준으로 필터링: x좌표가 second_median의 x좌표와 ±5 이상 차이나면 제거
+# 데이터 준비
+welding_points_array = np.array(welding_points)
+x_coords = welding_points_array[:, 0]  # 종속 변수
+y_coords = welding_points_array[:, 1]  # 독립 변수
+
+# 2D 배열 형태로 변환
+y_coords_reshaped = y_coords.reshape(-1, 1)
+
+# 선형 회귀 모델 학습
+model = LinearRegression()
+model.fit(y_coords_reshaped, x_coords)
+
+# x 좌표 예측
+predicted_x = model.predict(y_coords_reshaped)
+
+# 임계값 기준으로 필터링 (예: ±5)
+threshold = 5
 filtered_welding_points = [
-    point for point in welding_points if abs(point[0] - second_median[0]) <= 5
+    point for point, pred_x in zip(welding_points, predicted_x)
+    if abs(point[0] - pred_x) <= threshold
 ]
+
+outliers = [point for point, pred_x in zip(welding_points, predicted_x) if abs(point[0] - pred_x) > threshold]
+print("제거된 점들 (이상치):", outliers)
 
 # welding_points를 y좌표 기준으로 정렬
 welding_points_sorted = sorted(filtered_welding_points, key=lambda p: p[1])
@@ -254,7 +273,6 @@ for i in range(len(welding_points_sorted) - 1):
     pt1 = welding_points_sorted[i]
     pt2 = welding_points_sorted[i + 1]
     cv2.line(image_with_roi, pt1, pt2, (255, 0, 255), 2)  # 보라색 선으로 연결
-
 
 # 결과 시각화
 cv2.imshow('ROI Visualization', image_with_roi)
